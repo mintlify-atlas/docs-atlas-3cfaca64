@@ -1,7 +1,7 @@
 ---
-title: "Prepare the training dataset for Kermit detection"
+title: "Prepare the Kermit Detection Training Dataset with ImageAI"
 sidebarTitle: "Dataset Preparation"
-description: "Set up the kermit/no-kermit training and test image directories, extract video frames, rotate images for augmentation, and download supplemental images from Google."
+description: "Set up kermit and no-kermit directories, extract Muppets video frames, augment with rotations, and download supplemental images from Google."
 ---
 
 A well-organised, representative dataset is the foundation of any reliable image classifier. For Kermit detection, the model must learn to distinguish frames containing Kermit the Frog from everything else — so both the positive (`kermit`) and negative (`no-kermit`) classes need enough variety to generalise beyond the training episodes. This guide walks through every step needed to get your image directories into the shape that ImageAI's `ModelTraining` API expects.

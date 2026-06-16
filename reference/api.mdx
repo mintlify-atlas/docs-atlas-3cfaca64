@@ -1,5 +1,5 @@
 ---
-title: "Python API reference for Detect Kermit modules"
+title: "Python API reference for kermit_model_evaluation and helpers"
 sidebarTitle: "Python API"
 description: "Full Python API reference for kermit_model_evaluation, imageai_build_model, and helpers.utils — all public functions, signatures, and return types."
 ---
@@ -186,7 +186,7 @@ def print_progress(percent: float):
 ### `gather_dict`
 
 ```python
-async def gather_dict(tasks: dict) -> dict
+async def gather_dict(tasks: dict)
 ```
 
 Async coroutine. Accepts a dictionary of `{key: coroutine}` pairs, runs all coroutines concurrently using `asyncio.gather`, and returns a dictionary of `{key: result}` preserving the original keys.

@@ -1,7 +1,7 @@
 ---
-title: "Train the Kermit detection model with ImageAI"
+title: "Train a Kermit Detection Model Using ImageAI and ResNet"
 sidebarTitle: "Training"
-description: "Train a ResNet-based binary classifier using ImageAI's ModelTraining API to detect Kermit from The Muppets in images."
+description: "Train a ResNet-based binary image classifier with ImageAI's ModelTraining API to distinguish Kermit from no-kermit frames across 20 training epochs."
 ---
 
 Training uses ImageAI's `ModelTraining` class with a ResNet backbone to learn a binary classifier that separates `kermit` from `no-kermit` frames. The script reads your prepared image directories, runs for a configurable number of epochs with optional built-in data augmentation, and saves the resulting model weights to an HDF5 file ready for inference. Training time scales with dataset size, epoch count, batch size, and the compute hardware available.

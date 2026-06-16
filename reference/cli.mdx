@@ -1,7 +1,7 @@
 ---
-title: "CLI reference for kermit_model_evaluation.py"
+title: "kermit_model_evaluation.py CLI flags and usage reference"
 sidebarTitle: "CLI"
-description: "Complete CLI reference for kermit_model_evaluation.py including all flags, input types, output behavior, and example invocations."
+description: "Complete CLI reference for kermit_model_evaluation.py, covering all flags, default values, input types, output behavior, and example invocations."
 ---
 
 `kermit_model_evaluation.py` is the main command-line entry point for the Detect Kermit project. It loads the trained ResNet model and runs predictions on either a single image, a comma-separated list of images, or a full video file. The script uses Python's `asyncio` event loop internally, so predictions across multiple images or video frames are dispatched concurrently.

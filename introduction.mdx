@@ -1,7 +1,7 @@
 ---
-title: "Detect Kermit: ResNet binary image classifier for The Muppets"
+title: "Detect Kermit: binary ResNet classifier for The Muppets"
 sidebarTitle: "Introduction"
-description: "Learn how Detect Kermit uses ImageAI and ResNet to classify images and video frames as kermit or no-kermit with ~99% confidence."
+description: "Learn how Detect Kermit uses ImageAI and ResNet to classify images and video frames as kermit or no-kermit, reaching ~99% confidence on Muppets frames."
 ---
 
 Detect Kermit is a deep-learning pipeline that uses [ImageAI](https://github.com/OlafenwaMoses/ImageAI)'s `CustomImagePrediction` API — built on top of TensorFlow — to train and run a ResNet-backed binary classifier that answers one question for any image or video frame: is Kermit the Frog in this scene? The model outputs a probability pair for the two classes `kermit` and `no-kermit`, routinely reaching ~99% confidence on held-out validation frames from *The Muppets* TV show.
