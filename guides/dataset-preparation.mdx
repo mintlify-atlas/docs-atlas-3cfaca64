@@ -1,0 +1,105 @@
+---
+title: "Prepare the training dataset for Kermit detection"
+sidebarTitle: "Dataset Preparation"
+description: "Set up the kermit/no-kermit training and test image directories, extract video frames, rotate images for augmentation, and download supplemental images from Google."
+---
+
+A well-organised, representative dataset is the foundation of any reliable image classifier. For Kermit detection, the model must learn to distinguish frames containing Kermit the Frog from everything else — so both the positive (`kermit`) and negative (`no-kermit`) classes need enough variety to generalise beyond the training episodes. This guide walks through every step needed to get your image directories into the shape that ImageAI's `ModelTraining` API expects.
+
+## Directory structure
+
+ImageAI requires a strict folder layout. Create the following tree before running any helper scripts:
+
+```
+data/
+└── images/
+    ├── train/
+    │   ├── kermit/
+    │   │   └── kermit-train-images/
+    │   └── no-kermit/
+    │       └── no-kermit-train-images/
+    ├── test/
+    │   ├── kermit/
+    │   │   └── kermit-test-images/
+    │   └── no-kermit/
+    │       └── no-kermit-test-images/
+    ├── models/
+    └── json/
+```
+
+The `models/` directory is where the trained `.h5` file will be saved after training completes. The `json/` directory holds `model_class.json`, which maps class indices to human-readable labels.
+
+## Data sources
+
+Training data was extracted from **Muppets episodes 1 and 2**. Frames from these episodes are split into the `kermit` and `no-kermit` classes. **Episode 3** is reserved as the test and validation set, providing a clean, held-out benchmark that the model never sees during training.
+
+The `no-kermit` class is deliberately diverse to prevent the model from learning superficial shortcuts. It includes images of:
+
+- Green frogs (visually similar to Kermit)
+- Human characters from the show
+- Nature scenes and backgrounds
+- Other Muppet characters
+
+This variety forces the model to learn Kermit-specific features rather than simply detecting greenness or cartoon-like textures.
+
+## Step-by-step preparation
+
+<Steps>
+  <Step title="Extract frames from video">
+    Use `helpers/convert_vid2image.py` to sample one JPEG frame per second from your source `.avi` video file. The script reads `data/video.avi` and writes numbered frames to `data/videoframe/`:
+
+    ```bash
+    cd helpers
+    python convert_vid2image.py
+    ```
+
+    See the [Video to Frames](/helpers/convert-video-to-frames) page for a full breakdown of what this script does.
+  </Step>
+
+  <Step title="Organise frames into class folders">
+    Manually review the extracted frames and move them into the appropriate subdirectories:
+
+    - Frames containing Kermit → `data/images/train/kermit/kermit-train-images/`
+    - All other frames → `data/images/train/no-kermit/no-kermit-train-images/`
+
+    Repeat this process for episode 3 frames, placing them into the corresponding `test/` subdirectories.
+  </Step>
+
+  <Step title="Augment kermit images with rotation">
+    Run `helpers/rotate_images.py` to triple the size of your `kermit` training set by generating rotated copies of every image:
+
+    ```bash
+    cd helpers
+    python rotate_images.py
+    ```
+
+    See the [Rotate Images](/helpers/rotate-images) page for details on how rotations are applied and named.
+  </Step>
+
+  <Step title="Download supplemental images from Google (optional)">
+    Use `helpers/download_from_google.py` to pull up to 100 additional Kermit images from Google Images into `data/google-images/`. Move relevant downloads into your `kermit` training folder afterwards:
+
+    ```bash
+    cd helpers
+    python download_from_google.py
+    ```
+
+    See the [Download from Google](/helpers/download-from-google) page for configuration options.
+  </Step>
+</Steps>
+
+## Data enrichment via rotation
+
+The `rotate_images.py` script reads every `.jpg` in `data/images/train/kermit/kermit-train-images/` and produces three additional variants for each original:
+
+| Variant | Rotation | Filename suffix |
+|---------|----------|-----------------|
+| Right   | 90°      | `<name>right.jpg` |
+| Left    | −90°     | `<name>left.jpg`  |
+| 180°    | 180°     | `<name>None.jpg`  |
+
+Because each original produces three new images, this augmentation **quadruples** the raw frame count (original + three rotations), effectively tripling the number of new samples. Exposing the model to Kermit at multiple orientations significantly improves robustness to camera angles and scene compositions it has not seen before.
+
+<Note>
+  Due to their large file sizes, the Muppets `.avi` video files are **not** checked into the repository. Only the helper scripts are version-controlled. You must supply your own video files and run the extraction scripts locally before training.
+</Note>

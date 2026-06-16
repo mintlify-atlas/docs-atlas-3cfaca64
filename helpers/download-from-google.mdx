@@ -1,0 +1,74 @@
+---
+title: "Download supplemental Kermit images from Google Images"
+sidebarTitle: "Download from Google"
+description: "Use download_from_google.py to fetch up to 100 additional Kermit images from Google Images to supplement the training dataset."
+---
+
+`download_from_google.py` uses the `google_images_download` library to fetch extra images of Kermit from Google Images, supplementing the frames extracted from video with a broader variety of poses, lighting conditions, and contexts. This diversity helps the model generalise beyond the specific visual style of The Muppets episodes used for training.
+
+## Source code
+
+```python helpers/download_from_google.py
+import google_images_download
+import ssl
+
+from google_images_download import google_images_download
+
+
+def main():
+    ssl._create_default_https_context = ssl._create_unverified_context
+    response = google_images_download.googleimagesdownload()
+
+    # download by keyword
+    arguments = {'keywords': 'kermit', 'limit': 100, 'output_directory': 'data/google-images'}
+    paths = response.download(arguments)
+    print(paths)
+
+
+if __name__ == '__main__':
+    main()
+```
+
+## How to use
+
+```bash
+cd helpers
+python downloads_from_google.py
+```
+
+Images are downloaded automatically and organised into `data/google-images/kermit/` — the library creates a subdirectory named after the keyword.
+
+## Configuration
+
+The `arguments` dictionary controls what gets downloaded:
+
+| Key | Default | Description |
+|---|---|---|
+| `keywords` | `'kermit'` | The search query sent to Google Images. |
+| `limit` | `100` | Maximum number of images to download in a single run. |
+| `output_directory` | `'data/google-images'` | Root directory where images are saved. A subdirectory named after the keyword is created automatically inside it. |
+
+Edit any of these values directly in the script before running to customise the search or change the output location.
+
+<Warning>
+  The line `ssl._create_default_https_context = ssl._create_unverified_context` disables SSL certificate verification globally for the duration of the script. This is a workaround for environments where certificate validation fails when reaching Google's servers. It is only appropriate for local development and data-collection workflows — do **not** carry this pattern into production code.
+</Warning>
+
+<Note>
+  `google_images_download` is listed in `requirements.txt` and is installed automatically along with all other project dependencies when you run:
+
+  ```bash
+  pip install -r requirements.txt
+  ```
+</Note>
+
+## After downloading
+
+The downloaded images are raw search results and may include irrelevant or low-quality content. Before using them for training you should:
+
+1. Manually review the images in `data/google-images/kermit/` and remove anything that doesn't clearly show Kermit.
+2. Move the accepted images into the appropriate training subdirectory:
+   ```bash
+   mv data/google-images/kermit/*.jpg data/images/train/kermit/
+   ```
+3. Ensure the final folder structure matches what ImageAI expects before starting a training run.

@@ -1,0 +1,62 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Detect Kermit",
+  "projectDescription": "A binary image classification project that uses a ResNet-based deep learning model (via ImageAI) to detect whether Kermit the Frog from The Muppets TV show appears in a given image or video frame.",
+  "theme": "palm",
+  "primaryColor": "#4584f1",
+  "lightColor": "#83acf1",
+  "darkColor": null,
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": ["introduction", "quickstart"]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/dataset-preparation",
+          "guides/training",
+          "guides/prediction"
+        ]
+      },
+      {
+        "group": "Helper Scripts",
+        "pages": [
+          "helpers/convert-video-to-frames",
+          "helpers/rotate-images",
+          "helpers/download-from-google"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/cli",
+          "reference/api",
+          "reference/configuration"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Binary image classification: kermit vs. no-kermit",
+    "ResNet-based model training via ImageAI (CustomImagePrediction)",
+    "Prediction on both static images and video files (frame-by-frame at 1-second intervals)",
+    "Asynchronous batch prediction for video frames",
+    "Dataset enrichment via image rotation (90°, -90°, 180°) and Google Images download",
+    "Video-to-frame extraction helper using OpenCV",
+    "Trained model stored in HDF5 format (kermit_finder.h5) with a JSON class map"
+  ],
+  "publicApiSurface": [
+    "imageai_build_model.py — trains a CustomImagePrediction ResNet model",
+    "kermit_model_evaluation.py -t image -f <file> — predicts one or more images",
+    "kermit_model_evaluation.py -t video -f <file> — predicts all frames of a video",
+    "helpers/convert_vid2image.py — extracts frames from a video file",
+    "helpers/rotate_images.py — augments training images with rotations",
+    "helpers/download_from_google.py — downloads additional Kermit images from Google",
+    "helpers/utils.py::print_progress(percent) — CLI progress bar utility",
+    "helpers/utils.py::gather_dict(tasks) — async helper to await a dict of coroutines",
+    "data/images/models/kermit_finder.h5 — pre-trained ResNet model weights",
+    "data/images/json/model_class.json — class index mapping {0: kermit, 1: no-kermit}"
+  ]
+}

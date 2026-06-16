@@ -1,0 +1,86 @@
+---
+title: "CLI reference for kermit_model_evaluation.py"
+sidebarTitle: "CLI"
+description: "Complete CLI reference for kermit_model_evaluation.py including all flags, input types, output behavior, and example invocations."
+---
+
+`kermit_model_evaluation.py` is the main command-line entry point for the Detect Kermit project. It loads the trained ResNet model and runs predictions on either a single image, a comma-separated list of images, or a full video file. The script uses Python's `asyncio` event loop internally, so predictions across multiple images or video frames are dispatched concurrently.
+
+## Synopsis
+
+```bash
+python kermit_model_evaluation.py [--file_type TYPE] [--files FILES]
+```
+
+## Flags / Arguments
+
+<ParamField query="--file_type" type="string" default="video">
+  The type of input to classify. Accepted values: `image` or `video`.
+</ParamField>
+
+<ParamField query="--files" type="string" default="MuppetsEpisode3.avi">
+  Path to the file(s) to classify. When `--file_type` is `image`, accepts a comma-separated list of image paths. When `--file_type` is `video`, accepts a single `.avi` video path.
+</ParamField>
+
+### Short flag aliases
+
+| Short flag | Long flag      |
+|------------|----------------|
+| `-t`       | `--file_type`  |
+| `-f`       | `--files`      |
+
+## Examples
+
+<CodeGroup>
+
+```bash Predict a single image
+python kermit_model_evaluation.py -t image -f kermit.jpeg
+```
+
+```bash Predict multiple images (comma-separated)
+python kermit_model_evaluation.py -t image -f kermit.jpeg,no-kermit.jpeg,frame42.jpg
+```
+
+```bash Predict a video file
+python kermit_model_evaluation.py -t video -f MuppetsEpisode3.avi
+```
+
+</CodeGroup>
+
+## Output behaviour
+
+### Image input
+
+When `--file_type image` is used, the script prints class probabilities to stdout for each image supplied. For example:
+
+```
+Predicting the kermit.jpeg image
+{'kermit': '99.87%', 'no-kermit': '0.13%'}
+```
+
+Each image in a comma-separated list is predicted independently and its result dict is printed in sequence.
+
+### Video input
+
+When `--file_type video` is used, the script:
+
+1. Opens the `.avi` file with OpenCV and calculates the total duration in seconds.
+2. Extracts one frame per second (at 1 000 ms intervals) and saves each frame to `episode3_results/` as a JPEG:
+   ```
+   episode3_results/ep3_frame0.jpg
+   episode3_results/ep3_frame1.jpg
+   ...
+   episode3_results/ep3_frameN.jpg
+   ```
+3. Runs `predict_image` concurrently on every extracted frame.
+4. Writes a text banner directly onto each saved JPEG showing the prediction results, for example:
+   ```
+   kermit 99.87% no-kermit 0.13%
+   ```
+   The overlay is rendered in red using `cv2.FONT_HERSHEY_PLAIN` at position `(130, 25)`.
+
+A progress percentage is printed to stdout while frames are being gathered from the video.
+
+<Note>
+  If the `-f` flag is omitted entirely, the script defaults to looking for `MuppetsEpisode3.avi` in the **current working directory**. Make sure you run the script from the repository root, or pass the full path explicitly with `-f /path/to/your/video.avi`.
+</Note>

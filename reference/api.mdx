@@ -1,0 +1,269 @@
+---
+title: "Python API reference for Detect Kermit modules"
+sidebarTitle: "Python API"
+description: "Full Python API reference for kermit_model_evaluation, imageai_build_model, and helpers.utils — all public functions, signatures, and return types."
+---
+
+The project exposes several importable Python functions across `kermit_model_evaluation.py` and `helpers/utils.py`. All prediction functions are `async` coroutines and must be awaited (or run via `asyncio.get_event_loop().run_until_complete()`). The helper utilities in `helpers/utils.py` can be imported independently of the model to support concurrent task coordination and progress reporting.
+
+---
+
+## `kermit_model_evaluation` module
+
+### `predict_image`
+
+```python
+async def predict_image(image_name: Union[str, np.ndarray], model: CustomImagePrediction) -> dict
+```
+
+Async coroutine. Loads a single image and returns a dictionary mapping each class label to its predicted probability as a formatted percentage string.
+
+<ParamField query="image_name" type="Union[str, np.ndarray]" required>
+  Either a file path string (relative to `EXECUTION_PATH`, i.e. the repository root) or a NumPy array representing an already-loaded image.
+</ParamField>
+
+<ParamField query="model" type="CustomImagePrediction" required>
+  A fully loaded `CustomImagePrediction` instance (model path, JSON path, and `loadModel` already called). See [`main`](#main) for the standard initialisation pattern.
+</ParamField>
+
+<ResponseField name="return value" type="dict">
+  A dictionary mapping class name strings to probability strings, for example:
+
+  ```python
+  {'kermit': '99.87%', 'no-kermit': '0.13%'}
+  ```
+</ResponseField>
+
+Full function body:
+
+```python
+async def predict_image(image_name: Union[str, np.ndarray], model: CustomImagePrediction) -> dict:
+    """Predicts a given image with the supplied prediction model"""
+    print('\nPredicting the {} image'.format(image_name))
+
+    predictions, probabilities = model.predictImage(os.path.join(EXECUTION_PATH, image_name), result_count=2)
+
+    representation = {}
+    for eachPrediction, eachProbability in zip(predictions, probabilities):
+       representation[eachPrediction]= '{0:.2f}%'.format(float(eachProbability))
+
+    return representation
+```
+
+---
+
+### `predict_video`
+
+```python
+async def predict_video(video_path: str, model: CustomImagePrediction)
+```
+
+Async coroutine. Opens an `.avi` video file, samples one frame per second, runs `predict_image` concurrently on every frame via `gather_dict`, then writes prediction text onto each saved JPEG.
+
+<ParamField query="video_path" type="str" required>
+  Path to the `.avi` video file to process (e.g. `MuppetsEpisode3.avi`).
+</ParamField>
+
+<ParamField query="model" type="CustomImagePrediction" required>
+  A fully loaded `CustomImagePrediction` instance. The same model object used for image prediction is reused here.
+</ParamField>
+
+Key behaviour:
+
+1. **Frame extraction** — uses `cv2.CAP_PROP_POS_MSEC` to seek to each whole-second boundary (`counter * 1000` ms) and writes each frame to `episode3_results/ep3_frameN.jpg`.
+2. **Concurrent prediction** — all per-frame `predict_image` coroutines are gathered into a `tasks` dict and dispatched together with `gather_dict`.
+3. **Annotation** — after all predictions resolve, each JPEG is re-opened with OpenCV and a results string (e.g. `kermit 99.87% no-kermit 0.13%`) is drawn at pixel position `(130, 25)` using `cv2.FONT_HERSHEY_PLAIN` size `1.5` in red (`0, 0, 255`).
+
+```python
+async def predict_video(video_path: str, model: CustomImagePrediction):
+    cap = cv2.VideoCapture(video_path)
+    VIDEO_DURATION_IN_SECONDS = int(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) / cap.get(cv2.CAP_PROP_FPS)) + 1
+
+    print('Gathering frames from the video...')
+
+    counter = 0
+    tasks = {}
+    while cap.isOpened():
+        cap.set(cv2.CAP_PROP_POS_MSEC, (counter * 1000))
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        image_name = 'episode3_results/ep3_frame{}.jpg'.format(counter)
+        cv2.imwrite(image_name, frame)
+
+        tasks[image_name] = asyncio.ensure_future(predict_image(image_name, model))
+        counter += 1
+        print_progress(counter / VIDEO_DURATION_IN_SECONDS)
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    print('\nGetting predictions foreach frame from the model...')
+    results = await gather_dict(tasks)
+
+    print('\nWriting predictions on images....')
+    for image_path in results.keys():
+        print('\nWriting prediction for {}'.format(image_path))
+        img = cv2.imread(image_path)
+
+        results_string = ''
+        for res in sorted(results[image_path].keys()):
+            results_string += ' ' + res + ' ' + results[image_path][res]
+
+        cv2.putText(img, results_string, (130, 25), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 0, 255), 1, cv2.LINE_AA)
+        cv2.imwrite(image_path, img)
+
+    print('\nDone....')
+```
+
+---
+
+### `main`
+
+```python
+async def main(file_type: str, files: str)
+```
+
+Async entrypoint. Initialises the `CustomImagePrediction` model, then dispatches to either `predict_image` (for each image in a comma-separated list) or `predict_video` depending on `file_type`.
+
+<ParamField query="file_type" type="str" required>
+  Either `"image"` or `"video"`. Determines which prediction path is taken.
+</ParamField>
+
+<ParamField query="files" type="str" required>
+  For `"image"`: a comma-separated string of image file paths. For `"video"`: a single `.avi` file path.
+</ParamField>
+
+Model initialisation performed inside `main`:
+
+```python
+async def main(file_type: str, files: str):
+    model = CustomImagePrediction()
+    model.setModelTypeAsResNet()
+    model.setModelPath(os.path.join(EXECUTION_PATH, 'data/images/models/kermit_finder.h5'))
+    model.setJsonPath(os.path.join(EXECUTION_PATH, 'data/images/json/model_class.json'))
+    model.loadModel(num_objects=2)  # number of objects on your trained model
+
+    if file_type == 'image':
+        for image in files.split(','):
+            print(await predict_image(image_name=image, model=model))
+    else:
+        await predict_video(video_path=files, model=model)
+```
+
+<Note>
+  `main` is invoked from the `__main__` block via `loop.run_until_complete(main(...))`. You can also call it directly from your own async code with `await main(file_type, files)`.
+</Note>
+
+---
+
+## `helpers.utils` module
+
+### `print_progress`
+
+```python
+def print_progress(percent: float)
+```
+
+Synchronous. Writes an in-place percentage progress indicator to stdout by overwriting the current line with a carriage return (`\r`). Useful for displaying frame-extraction progress without flooding the terminal with newlines.
+
+<ParamField query="percent" type="float" required>
+  A value between `0.0` and `1.0` representing completion. Rendered as an integer percentage, e.g. `0.42` → `42%`.
+</ParamField>
+
+```python
+def print_progress(percent: float):
+    # percent float from 0 to 1.
+    stdout.write("\r")
+    stdout.write("    {:.0f}%".format(percent * 100))
+    stdout.flush()
+```
+
+---
+
+### `gather_dict`
+
+```python
+async def gather_dict(tasks: dict) -> dict
+```
+
+Async coroutine. Accepts a dictionary of `{key: coroutine}` pairs, runs all coroutines concurrently using `asyncio.gather`, and returns a dictionary of `{key: result}` preserving the original keys.
+
+<ParamField query="tasks" type="dict" required>
+  A dictionary mapping arbitrary keys (e.g. image file paths) to awaitables (coroutines or futures). All values are scheduled concurrently.
+</ParamField>
+
+<ResponseField name="return value" type="dict">
+  A dictionary with the same keys as `tasks`, where each value is the resolved result of the corresponding coroutine.
+</ResponseField>
+
+Full function body:
+
+```python
+async def gather_dict(tasks: dict):
+    async def mark(key, coro):
+        return key, await coro
+
+    return {
+        key: result for key, result in await asyncio.gather(
+                    *(mark(key, coro) for key, coro in tasks.items()
+                      )
+        )
+    }
+```
+
+`gather_dict` is used by `predict_video` to fan out `predict_image` calls across all extracted frames in a single `await`, maximising I/O concurrency.
+
+---
+
+## `imageai_build_model` module
+
+### `main`
+
+```python
+def main()
+```
+
+Synchronous entrypoint. Creates a `ModelTraining` instance, configures it to use the ResNet architecture, points it at the data directory, and kicks off training.
+
+```python
+from imageai.Prediction.Custom import ModelTraining
+
+def main():
+    model_trainer = ModelTraining()
+    model_trainer.setModelTypeAsResNet()
+    model_trainer.setDataDirectory("data/images")
+    model_trainer.trainModel(num_objects=2,
+                             num_experiments=20,
+                             enhance_data=True,
+                             batch_size=16,
+                             show_network_summary=True)
+```
+
+`trainModel` parameters used:
+
+<ParamField query="num_objects" type="int" default="2">
+  Number of output classes the model is trained to predict. Here: `kermit` and `no-kermit`.
+</ParamField>
+
+<ParamField query="num_experiments" type="int" default="20">
+  Number of training epochs (full passes over the training dataset).
+</ParamField>
+
+<ParamField query="enhance_data" type="bool" default="True">
+  Enables ImageAI's built-in data augmentation (random flips, rotations, shifts) during training to improve generalisation.
+</ParamField>
+
+<ParamField query="batch_size" type="int" default="16">
+  Number of training samples processed per gradient update step.
+</ParamField>
+
+<ParamField query="show_network_summary" type="bool" default="True">
+  When `True`, prints a Keras-style layer summary of the ResNet architecture to stdout before training begins.
+</ParamField>
+
+<Tip>
+  Training time varies significantly depending on the number of images, your hardware, and whether a GPU is available. The saved model checkpoint (`kermit_finder.h5`) is written to `data/images/models/` after training completes.
+</Tip>

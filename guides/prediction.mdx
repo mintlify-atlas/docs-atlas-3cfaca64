@@ -1,0 +1,87 @@
+---
+title: "Run Kermit detection predictions on images and video"
+sidebarTitle: "Prediction"
+description: "Use kermit_model_evaluation.py to classify single images or annotate video frames with kermit/no-kermit predictions using the trained ResNet model."
+---
+
+`kermit_model_evaluation.py` loads the trained ResNet model and runs inference via ImageAI's `CustomImagePrediction` class. It accepts either a single image, a comma-separated list of images, or a video file as input, and returns class probabilities for both `kermit` and `no-kermit` on each frame or image. For video input, the script also burns the prediction text directly onto each extracted frame and saves the annotated images to disk.
+
+## How the evaluation script works
+
+On startup, the script:
+
+1. Instantiates a `CustomImagePrediction` model and sets it to ResNet architecture.
+2. Loads the trained weights from **`data/images/models/kermit_finder.h5`**.
+3. Loads the class label map from **`data/images/json/model_class.json`**.
+4. Accepts the **`-t`** flag (`image` or `video`) to select the input type.
+5. Accepts the **`-f`** flag with the path (or comma-separated paths) to the target file(s).
+6. Returns probabilities for both `kermit` and `no-kermit` classes for every input.
+
+## Predicting a single image
+
+Pass `-t image` and the path to your image file:
+
+```bash
+python kermit_model_evaluation.py -t image -f kermit.jpeg
+```
+
+Expected output:
+
+```
+Predicting the kermit.jpeg image
+ kermit: 99.87 no-kermit: 0.13
+```
+
+## Predicting multiple images
+
+Supply a comma-separated list of file paths to the `-f` flag — no spaces around the commas:
+
+```bash
+python kermit_model_evaluation.py -t image -f image1.jpg,image2.jpg,image3.jpg
+```
+
+The script iterates through each path in order and prints the prediction result for each file in turn.
+
+## Predicting a video
+
+Pass `-t video` and the path to an `.avi` file:
+
+```bash
+python kermit_model_evaluation.py -t video -f MuppetsEpisode3.avi
+```
+
+The script processes the video as follows:
+
+- **Frame extraction** — OpenCV reads one frame per second (at 1 000 ms intervals) for the entire duration of the video.
+- **Frame storage** — Each extracted frame is saved as a JPEG to `episode3_results/ep3_frameN.jpg`, where `N` is the frame index.
+- **Async batch prediction** — All frames are dispatched concurrently using Python's `asyncio` event loop via a `gather_dict` utility, making full use of available compute without waiting for one frame to finish before starting the next.
+- **Annotation** — After all predictions return, OpenCV writes a text banner onto each saved frame image showing the `kermit` and `no-kermit` probabilities (e.g. ` kermit 99.87% no-kermit 0.13%`), and overwrites the JPEG on disk.
+
+## The `predict_image` async function
+
+The core prediction primitive is an async function that wraps ImageAI's synchronous `predictImage` call:
+
+```python
+async def predict_image(image_name: Union[str, np.ndarray], model: CustomImagePrediction) -> dict:
+    """Predicts a given image with the supplied prediction model"""
+```
+
+It accepts either a file path string or a NumPy array (allowing it to be called directly on OpenCV frame data) alongside the loaded `CustomImagePrediction` model instance. The return value is a `dict` mapping each class name to its probability formatted as a two-decimal percentage string — for example:
+
+```python
+{'kermit': '99.87%', 'no-kermit': '0.13%'}
+```
+
+This dictionary is what gets serialised into the text banner drawn on video frames, and printed to stdout for image inputs.
+
+## Known limitations
+
+- **Kermit-like false positives** — The model may occasionally misclassify visually similar characters (such as green frogs or other amphibian-like Muppets) as Kermit. This is noted in the project README as a known behaviour, and arises because the decision boundary between "green frog" and "Kermit" is inherently subtle. Adding more diverse `no-kermit` examples — especially of green frogs — during training can reduce this error.
+
+- **Video format** — The video prediction path is designed around `.avi` files and uses `cv2.VideoCapture` directly. Other container formats may work depending on your OpenCV build, but only `.avi` has been tested.
+
+- **Output directory** — All annotated video frames are written to a flat `episode3_results/` directory relative to wherever you run the script. There is currently no option to change this output path via CLI flags.
+
+<Note>
+  For a full list of available command-line flags (including `--file_type` / `-t` and `--files` / `-f`), see the [CLI Reference](/reference/cli).
+</Note>

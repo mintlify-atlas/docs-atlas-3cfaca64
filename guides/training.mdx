@@ -1,0 +1,102 @@
+---
+title: "Train the Kermit detection model with ImageAI"
+sidebarTitle: "Training"
+description: "Train a ResNet-based binary classifier using ImageAI's ModelTraining API to detect Kermit from The Muppets in images."
+---
+
+Training uses ImageAI's `ModelTraining` class with a ResNet backbone to learn a binary classifier that separates `kermit` from `no-kermit` frames. The script reads your prepared image directories, runs for a configurable number of epochs with optional built-in data augmentation, and saves the resulting model weights to an HDF5 file ready for inference. Training time scales with dataset size, epoch count, batch size, and the compute hardware available.
+
+## Training script
+
+The full training script is concise by design — ImageAI abstracts away the ResNet architecture, data loading, and checkpoint saving:
+
+```python imageai_build_model.py
+from imageai.Prediction.Custom import ModelTraining
+
+
+def main():
+    model_trainer = ModelTraining()
+    model_trainer.setModelTypeAsResNet()
+    model_trainer.setDataDirectory("data/images")
+    model_trainer.trainModel(num_objects=2,
+                             num_experiments=20,
+                             enhance_data=True,
+                             batch_size=16,
+                             show_network_summary=True)
+
+
+if __name__ == '__main__':
+    main()
+```
+
+## Training parameters
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `num_objects` | `2` | Binary classification — the two classes are `kermit` and `no-kermit`. |
+| `num_experiments` | `20` | Number of full training epochs over the dataset. |
+| `enhance_data` | `True` | Enables ImageAI's built-in data augmentation (additional flips, shifts, and zoom transforms applied on the fly). |
+| `batch_size` | `16` | Number of samples used per gradient update. Lower this value if you run into GPU memory errors. |
+| `show_network_summary` | `True` | Prints the full ResNet layer-by-layer architecture to stdout before training begins. |
+
+## Running training
+
+<Steps>
+  <Step title="Prepare the dataset">
+    Make sure your `data/images/` directory is fully populated with `train/` and `test/` subdirectories for both classes before starting. Follow the [Dataset Preparation](/guides/dataset-preparation) guide if you have not done this yet.
+  </Step>
+
+  <Step title="Start training">
+    From the repository root, run:
+
+    ```bash
+    python imageai_build_model.py
+    ```
+  </Step>
+
+  <Step title="Wait for training to complete">
+    Training time varies depending on the number of training images, the value of `num_experiments`, `batch_size`, and your hardware. With 20 epochs on a mid-sized dataset, expect anywhere from several minutes on a GPU to multiple hours on CPU only.
+  </Step>
+
+  <Step title="Locate the trained model">
+    Once training finishes, the saved model weights are written to:
+
+    ```
+    data/images/models/kermit_finder.h5
+    ```
+
+    This file is referenced by the prediction script when running inference.
+  </Step>
+</Steps>
+
+## Output files
+
+After a successful training run, two key files are produced:
+
+**`data/images/models/kermit_finder.h5`** — The trained ResNet weights saved in HDF5 format. This is the file loaded by `kermit_model_evaluation.py` at inference time.
+
+**`data/images/json/model_class.json`** — A JSON file that maps integer class indices to human-readable class names:
+
+```json
+{
+    "0": "kermit",
+    "1": "no-kermit"
+}
+```
+
+Both files are required together for predictions; the model file provides the weights, and the JSON file provides the label mapping.
+
+<Tip>
+  For faster training, run on a CUDA-enabled GPU. If TensorFlow complains about a limited number of available devices, set the `CUDA_VISIBLE_DEVICES` environment variable before launching the script:
+
+  ```bash
+  export CUDA_VISIBLE_DEVICES=''
+  python imageai_build_model.py
+  ```
+
+  This forces TensorFlow to fall back gracefully and avoids device enumeration errors.
+</Tip>
+
+<Warning>
+  `requirements.txt` lists **both** `tensorflow==1.12.0` and `tensorflow-gpu==1.12.0`. Install only the package that matches your hardware — installing both in the same environment will cause conflicts. Use `tensorflow` for CPU-only machines and `tensorflow-gpu` for machines with a CUDA-compatible GPU.
+</Warning>

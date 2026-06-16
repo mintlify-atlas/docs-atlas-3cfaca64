@@ -1,0 +1,89 @@
+---
+title: "Augment training images by rotating with rotate_images"
+sidebarTitle: "Rotate Images"
+description: "Use rotate_images.py to augment the Kermit training set by generating 90°, -90°, and 180° rotated copies of every image."
+---
+
+`rotate_images.py` is a data augmentation helper that effectively triples the training set by creating three rotated variants of each Kermit training image — rotated 90° clockwise (right), 90° counter-clockwise (left), and 180°. Running this script before training gives the model a much wider variety of image orientations to learn from without requiring any additional raw footage.
+
+## Source code
+
+```python helpers/rotate_images.py
+import glob
+from typing import Optional
+
+from utils import print_progress
+from PIL import Image
+
+PATH_TO_IMAGES = '../data/images/train/kermit/kermit-train-images'
+
+
+def rotate_image(image_path: str, direction: Optional[str]):
+    image = Image.open(image_path)
+
+    if direction == 'right':
+        rotated = image.rotate(90)
+    elif direction == 'left':
+        rotated = image.rotate(-90)
+    else:
+        rotated = image.rotate(180)
+
+    image_name = image_path.split('/')[-1].replace('.jpg', '')
+    rotated.save('{}/{}{}.jpg'.format(PATH_TO_IMAGES, image_name, direction))
+
+
+def main():
+    # get all image names
+    images = glob.glob('{}/*.jpg'.format(PATH_TO_IMAGES))
+
+    for i, image in enumerate(images):
+        rotate_image(image, 'right')
+        rotate_image(image, 'left')
+        rotate_image(image)
+        print_progress((i + 1) / len(images))
+
+    print('\nRotated {} images'.format(len(images)))
+
+
+if __name__ == '__main__':
+    main()
+```
+
+## How to use
+
+Run the script from the `helpers/` directory:
+
+```bash
+cd helpers
+python rotate_images.py
+```
+
+Progress is printed to stdout as a percentage that updates in place. A final summary line reports how many source images were processed once the script finishes.
+
+## Output naming
+
+The rotated copies are saved alongside the originals inside `PATH_TO_IMAGES`. The direction string is appended directly to the base filename. For example, an original file named `movie1frame100.jpg` produces three new files:
+
+| File | Rotation |
+|---|---|
+| `movie1frame100right.jpg` | 90° clockwise |
+| `movie1frame100left.jpg` | 90° counter-clockwise |
+| `movie1frame100None.jpg` | 180° |
+
+The `None` suffix on the 180° file comes from calling `rotate_image(image)` without a `direction` argument, which leaves the parameter as `None` — Python's string formatting then renders it literally as `None`.
+
+## Configuration
+
+The constant at the top of the script controls which directory is scanned and written to:
+
+```python
+PATH_TO_IMAGES = '../data/images/train/kermit/kermit-train-images'
+```
+
+Edit this value to point to a different image directory if your dataset is stored elsewhere. The path is relative to the `helpers/` directory from which the script is run.
+
+<Tip>
+  Data augmentation via rotation helps the model learn rotation-invariant features, improving accuracy on real-world video where Kermit may appear at various angles or camera orientations. Tripling the dataset this way is a low-cost alternative to collecting more raw footage and is especially valuable when the original frame count is limited.
+</Tip>
+
+`print_progress` is imported from `helpers/utils.py`. It writes an in-place percentage to stdout using `\r` carriage returns. See the API reference for `utils.py` for details.

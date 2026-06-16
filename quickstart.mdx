@@ -1,47 +1,180 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get started with Detect Kermit in 5 minutes"
+sidebarTitle: "Quickstart"
+description: "Install Detect Kermit, load the pre-trained ResNet model, and classify your first image or video in under 5 minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+The fastest path to a working prediction is to use the **pre-trained model** that ships with the repository. Because the weights file (`kermit_finder.h5`) is stored via Git LFS, no retraining is necessary — clone the repo, install the dependencies, and you are one command away from classifying any image or video as `kermit` or `no-kermit`. This guide walks through exactly that path.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+
+  <Step title="Prerequisites">
+    Make sure you have the following before you begin:
+
+    - **Python 3.x** — the evaluation script uses `asyncio` and type annotations that require Python 3.5+.
+    - **pip** — used to install all Python dependencies.
+    - **Git LFS** — required to download the pre-trained `.h5` model that is tracked as a large file in the repository.
+
+    Install Git LFS for your platform:
+
+    **macOS (Homebrew)**
+    ```bash
+    brew install git-lfs
+    ```
+
+    **Ubuntu / Debian**
+    ```bash
+    sudo apt-get install git-lfs
+    ```
+
+    After installation, initialise Git LFS for your user account (only needed once):
 
     ```bash
-    npm install your-package
+    git lfs install
     ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+    Then clone the repository so that LFS objects are downloaded automatically:
 
     ```bash
-    your-cli init
+    git clone https://github.com/ilirosmanaj/detect_kermit.git
+    cd detect_kermit
     ```
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Install dependencies">
+    Install all required Python packages from the pinned `requirements.txt`:
 
     ```bash
-    your-cli start
+    pip install -r requirements.txt
+    ```
+
+    The file installs the following exact versions to ensure reproducibility:
+
+    | Package | Version / Source |
+    |---|---|
+    | `tensorflow` | `1.12.0` |
+    | `tensorflow-gpu` | `1.12.0` |
+    | `keras` | `2.2.4` |
+    | `opencv-python` | `4.0.0.21` |
+    | `imageai` | `2.0.2` (GitHub wheel URL) |
+    | `pillow` | `5.4.1` |
+    | `scipy` | `1.2.0` |
+    | `matplotlib` | `3.0.2` |
+    | `h5py` | `2.9.0` |
+    | `pandas` | `0.23.4` |
+    | `google_images_download` | latest |
+
+    ImageAI 2.0.2 is installed directly from GitHub because it is not published to PyPI:
+
+    ```
+    https://github.com/OlafenwaMoses/ImageAI/releases/download/2.0.2/imageai-2.0.2-py3-none-any.whl
+    ```
+
+    <Tip>
+      On **macOS**, the standard pip distribution of TensorFlow does not work. Install it from the official Google storage URL instead:
+
+      ```bash
+      python3 -m pip install --upgrade https://storage.googleapis.com/tensorflow/mac/cpu/tensorflow-1.12.0-py3-none-any.whl
+      ```
+
+      Run this command **before** `pip install -r requirements.txt`, or replace the `tensorflow==1.12.0` line in `requirements.txt` with the URL above.
+    </Tip>
+  </Step>
+
+  <Step title="Verify the pre-trained model exists">
+    After cloning with Git LFS enabled, confirm the two files the inference script depends on are present:
+
+    ```bash
+    ls -lh data/images/models/kermit_finder.h5
+    ls -lh data/images/json/model_class.json
+    ```
+
+    - **`data/images/models/kermit_finder.h5`** — the serialised ResNet weights produced by `imageai_build_model.py`. This file is tracked by Git LFS and should be several hundred megabytes.
+    - **`data/images/json/model_class.json`** — the class index map used at inference time. Its contents are:
+
+    ```json
+    {
+        "0": "kermit",
+        "1": "no-kermit"
+    }
+    ```
+
+    If `kermit_finder.h5` is only a few hundred bytes, Git LFS did not download the real file. Run `git lfs pull` to fetch it:
+
+    ```bash
+    git lfs pull
     ```
   </Step>
+
+  <Step title="Run a prediction on an image">
+    Use `kermit_model_evaluation.py` with `-t image` to classify a single image. Pass the file path with `-f`:
+
+    ```bash
+    python kermit_model_evaluation.py -t image -f kermit.jpeg
+    ```
+
+    Expected output:
+
+    ```
+    Predicting the kermit.jpeg image
+     kermit: 99.87 no-kermit: 0.13
+    ```
+
+    The script prints the probability for each class. A `kermit` score near 100 confirms the model has high confidence that Kermit the Frog appears in the image.
+
+    You can also classify multiple images in a single run by passing a comma-separated list of file paths:
+
+    ```bash
+    python kermit_model_evaluation.py -t image -f kermit.jpeg,frog.jpeg,scene.jpeg
+    ```
+
+    Each image is predicted independently and its result is printed in turn.
+
+    <Warning>
+      If TensorFlow throws an error about no available GPU devices or a `CUDA_VISIBLE_DEVICES` conflict, force CPU-only execution by exporting:
+
+      ```bash
+      export CUDA_VISIBLE_DEVICES=''
+      ```
+
+      Run this in the same shell session before executing the prediction script.
+    </Warning>
+  </Step>
+
+  <Step title="Run a prediction on a video">
+    To classify every second of a video file, use `-t video`:
+
+    ```bash
+    python kermit_model_evaluation.py -t video -f MuppetsEpisode3.avi
+    ```
+
+    The script performs the following steps automatically:
+
+    1. **Frame extraction** — OpenCV seeks to each 1-second mark (`CAP_PROP_POS_MSEC`) and captures one frame per second for the full duration of the video.
+    2. **Async batch inference** — each extracted frame is submitted as an `asyncio` coroutine so all frames are predicted concurrently rather than sequentially.
+    3. **Annotation** — once all predictions are collected, the confidence scores for both classes are rendered as a red text banner at the top of each frame image using `cv2.putText`.
+    4. **Output** — annotated frames are saved as JPEGs in the `episode3_results/` directory, named sequentially (`ep3_frame0.jpg`, `ep3_frame1.jpg`, …).
+
+    You can flip through the output directory to review which seconds of the episode contain Kermit, or stitch the annotated frames back into a video for a quick visual audit.
+  </Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Next Steps
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+<CardGroup cols={2}>
+  <Card
+    title="Prediction Guide"
+    icon="magnifying-glass"
+    href="/guides/prediction"
+  >
+    Deep-dive into image and video prediction: batch processing, understanding confidence scores, and interpreting edge cases like Kermit-lookalike characters.
+  </Card>
+  <Card
+    title="Training Guide"
+    icon="brain"
+    href="/guides/training"
+  >
+    Learn how to build your own labelled dataset, configure training epochs and batch size, and fine-tune the ResNet model from scratch with ImageAI.
+  </Card>
+</CardGroup>

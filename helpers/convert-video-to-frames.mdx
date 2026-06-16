@@ -1,0 +1,59 @@
+---
+title: "Extract video frames for training with convert_vid2image"
+sidebarTitle: "Video to Frames"
+description: "Use convert_vid2image.py to extract one JPEG frame per second from an .avi video file and save them for use as training or test images."
+---
+
+`convert_vid2image.py` reads a video file using OpenCV and writes one JPEG frame per second to disk, producing the raw images needed for dataset preparation. These frames form the foundation of the Kermit detection training and test sets — episodes 1 and 2 supply training images, while episode 3 supplies the validation set.
+
+## Source code
+
+```python helpers/convert_vid2image.py
+import cv2
+
+count = 0
+cap = cv2.VideoCapture('data/video.avi')
+ret, image = cap.read()
+
+print('Starting getting frames from video...')
+while ret:
+    cap.set(cv2.CAP_PROP_POS_MSEC, (count * 1000))
+    ret, image = cap.read()
+    if not ret:
+        break
+
+    cv2.imwrite( 'data/videoframe/' + "frame%d.jpg" % count, image)
+    count = count + 1
+```
+
+## How to use
+
+1. Place your video file at `data/video.avi` (or edit the path string in the script to match your file location).
+2. Create the output directory so OpenCV has somewhere to write:
+   ```bash
+   mkdir -p data/videoframe
+   ```
+3. Run the script from the `helpers/` directory:
+   ```bash
+   cd helpers
+   python convert_vid2image.py
+   ```
+4. Frame images are written to `data/videoframe/` and named sequentially — `frame0.jpg`, `frame1.jpg`, and so on.
+
+## How it works
+
+The script opens the video with `cv2.VideoCapture` and enters a loop that advances one second on every iteration. Seeking is done by calling:
+
+```python
+cap.set(cv2.CAP_PROP_POS_MSEC, (count * 1000))
+```
+
+`cv2.CAP_PROP_POS_MSEC` sets the playback position in milliseconds, so multiplying the integer `count` by `1000` moves the read head to exactly `count` seconds into the video. The resulting frame is then encoded and saved as a JPEG via `cv2.imwrite`. The loop terminates when `cap.read()` returns `ret = False`, which happens once the end of the video is reached.
+
+<Note>
+  Video files are intentionally **not** checked into the repository due to their large file sizes. Only this helper script is provided. You must supply your own `.avi` episode files before running the extraction.
+</Note>
+
+<Warning>
+  The output directory `data/videoframe/` must exist **before** running the script. OpenCV's `cv2.imwrite` will silently skip writing any frame if the destination directory is missing — no error is raised, and you will end up with an empty dataset.
+</Warning>

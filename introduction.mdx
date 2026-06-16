@@ -1,0 +1,134 @@
+---
+title: "Detect Kermit: ResNet binary image classifier for The Muppets"
+sidebarTitle: "Introduction"
+description: "Learn how Detect Kermit uses ImageAI and ResNet to classify images and video frames as kermit or no-kermit with ~99% confidence."
+---
+
+Detect Kermit is a deep-learning pipeline that uses [ImageAI](https://github.com/OlafenwaMoses/ImageAI)'s `CustomImagePrediction` API — built on top of TensorFlow — to train and run a ResNet-backed binary classifier that answers one question for any image or video frame: is Kermit the Frog in this scene? The model outputs a probability pair for the two classes `kermit` and `no-kermit`, routinely reaching ~99% confidence on held-out validation frames from *The Muppets* TV show.
+
+## The Problem
+
+*The Muppets* TV show features a large cast of characters and rapid scene cuts, making it non-trivial to locate Kermit the Frog programmatically. Pixel heuristics (colour-based segmentation, template matching) break down across lighting changes, angles, and partial occlusions. A learned binary classifier removes these fragile assumptions: given enough labelled frames, the model infers the abstract visual signature of Kermit rather than any single low-level feature.
+
+## Solution Architecture
+
+The system is structured around three concerns — data preparation, model training, and inference — each handled by a dedicated script or helper module.
+
+### Model backbone: ImageAI + ResNet
+
+Training is driven by ImageAI's `ModelTraining` class. Calling `setModelTypeAsResNet()` selects a ResNet convolutional backbone, which is then fine-tuned on the Kermit dataset:
+
+```python
+from imageai.Prediction.Custom import ModelTraining
+
+model_trainer = ModelTraining()
+model_trainer.setModelTypeAsResNet()
+model_trainer.setDataDirectory("data/images")
+model_trainer.trainModel(
+    num_objects=2,
+    num_experiments=20,
+    enhance_data=True,
+    batch_size=16,
+    show_network_summary=True,
+)
+```
+
+`enhance_data=True` applies ImageAI's built-in augmentation (flips, brightness jitter) on top of the manually rotated images already in the dataset.
+
+### Binary class map
+
+The classifier recognises exactly two classes, defined in `data/images/json/model_class.json`:
+
+```json
+{
+    "0": "kermit",
+    "1": "no-kermit"
+}
+```
+
+Index `0` maps to **kermit** and index `1` maps to **no-kermit**. This file is loaded at inference time alongside the trained weights.
+
+### Trained model storage
+
+After training completes, ImageAI serialises the best checkpoint to HDF5 format at:
+
+```
+data/images/models/kermit_finder.h5
+```
+
+The `.h5` file is tracked with Git LFS so the pre-trained model is available immediately after cloning the repository without retraining from scratch.
+
+### Inference: static images
+
+For single images (or comma-separated batches), `kermit_model_evaluation.py` loads `CustomImagePrediction`, sets the ResNet model type, points it at the `.h5` weights and the JSON class map, then calls `predictImage`:
+
+```python
+from imageai.Prediction.Custom import CustomImagePrediction
+
+model = CustomImagePrediction()
+model.setModelTypeAsResNet()
+model.setModelPath("data/images/models/kermit_finder.h5")
+model.setJsonPath("data/images/json/model_class.json")
+model.loadModel(num_objects=2)
+
+predictions, probabilities = model.predictImage("kermit.jpeg", result_count=2)
+```
+
+### Inference: video (async frame extraction)
+
+For video files, frames are extracted at **1-second intervals** using OpenCV (`cv2.CAP_PROP_POS_MSEC`). Each frame is saved as a JPEG to `episode3_results/`, then submitted as an `asyncio` coroutine via `asyncio.ensure_future`. The custom `gather_dict` helper collects all per-frame results concurrently, and the prediction label is then burned onto each frame image as a red text banner using `cv2.putText`.
+
+```python
+cap.set(cv2.CAP_PROP_POS_MSEC, (counter * 1000))
+ret, frame = cap.read()
+tasks[image_name] = asyncio.ensure_future(predict_image(image_name, model))
+```
+
+This async batch approach avoids blocking the frame-reading loop on model inference, keeping throughput higher for long episodes.
+
+### Data preparation helpers
+
+Several scripts under `helpers/` support building a high-quality training set:
+
+- **`convert_vid2image.py`** — extracts frames from raw episode video files.
+- **`rotate_images.py`** — enriches the dataset with left-rotated, right-rotated, and 180° copies of every training image.
+- **`downloads_from_google.py`** — supplements the episode frames with additional Kermit images fetched via `google_images_download`.
+
+See the [Dataset Preparation guide](/guides/dataset-preparation) for step-by-step instructions.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card
+    title="Train Model"
+    icon="brain"
+    href="/guides/training"
+  >
+    Fine-tune the ResNet backbone on your own labelled `kermit` / `no-kermit` image sets using ImageAI's `ModelTraining` API.
+  </Card>
+  <Card
+    title="Predict Images"
+    icon="image"
+    href="/guides/prediction"
+  >
+    Run the pre-trained classifier on a single image or a comma-separated batch and get per-class probability scores instantly.
+  </Card>
+  <Card
+    title="Dataset Preparation"
+    icon="database"
+    href="/guides/dataset-preparation"
+  >
+    Extract frames from video, rotate and augment images, and download supplementary data from Google Images to build a robust training set.
+  </Card>
+  <Card
+    title="CLI Reference"
+    icon="terminal"
+    href="/reference/cli"
+  >
+    Full reference for all command-line arguments accepted by `kermit_model_evaluation.py` and the helper scripts.
+  </Card>
+</CardGroup>
+
+<Note>
+  Detect Kermit has been tested on **Linux only**. macOS and Windows users may encounter compatibility issues with certain TensorFlow versions. On macOS, the standard pip distribution of TensorFlow does not install correctly — see the [Quickstart](/quickstart) for the macOS-specific installation workaround.
+</Note>

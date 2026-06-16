@@ -1,0 +1,161 @@
+---
+title: "Project configuration and file structure reference"
+sidebarTitle: "Configuration"
+description: "Reference for Detect Kermit's required directory layout, model files, class JSON, and dependency versions in requirements.txt."
+---
+
+Detect Kermit relies on a specific directory layout and two artefact files (a `.h5` model checkpoint and a `.json` class map) to function correctly. This page documents all configuration surfaces: the expected folder tree, the class-mapping JSON, the trained model file, pinned Python dependencies, and the `EXECUTION_PATH` convention used throughout the codebase.
+
+---
+
+## Directory structure
+
+The repository must be laid out as follows before running training or inference. The `train/` and `test/` sub-directories are consumed directly by ImageAI's `ModelTraining` and `CustomImagePrediction` APIs.
+
+```
+detect_kermit/
+├── data/
+│   └── images/
+│       ├── train/
+│       │   ├── kermit/kermit-train-images/
+│       │   └── no-kermit/no-kermit-train-images/
+│       ├── test/
+│       │   ├── kermit/kermit-test-images/
+│       │   └── no-kermit/no-kermit-test-images/
+│       ├── models/
+│       │   └── kermit_finder.h5
+│       └── json/
+│           └── model_class.json
+├── helpers/
+│   ├── convert_vid2image.py
+│   ├── download_from_google.py
+│   ├── rotate_images.py
+│   └── utils.py
+├── episode3_results/
+├── imageai_build_model.py
+├── kermit_model_evaluation.py
+└── requirements.txt
+```
+
+The `episode3_results/` directory is created manually (or expected to exist) before running video inference — the script writes annotated JPEG frames there at runtime.
+
+---
+
+## `model_class.json`
+
+ImageAI requires a class-map JSON file that translates integer class indices (as produced by the model's softmax output layer) into human-readable label strings.
+
+```json data/images/json/model_class.json
+{
+    "0" : "kermit",
+    "1" : "no-kermit"
+}
+```
+
+- **Index `0`** → `kermit` — frames or images in which Kermit the Frog is detected.
+- **Index `1`** → `no-kermit` — frames or images in which Kermit is not present.
+
+The path to this file is passed to the model at runtime via:
+
+```python
+model.setJsonPath(os.path.join(EXECUTION_PATH, 'data/images/json/model_class.json'))
+```
+
+If the JSON file is missing or the keys do not match what was used during training, ImageAI will raise an error when `loadModel` is called.
+
+---
+
+## Model file (`kermit_finder.h5`)
+
+| Property     | Value                                              |
+|--------------|----------------------------------------------------|
+| **Filename** | `kermit_finder.h5`                                 |
+| **Location** | `data/images/models/kermit_finder.h5`              |
+| **Format**   | HDF5 — Keras `.h5` serialisation format            |
+| **Architecture** | ResNet, configured via `setModelTypeAsResNet()` |
+| **Storage**  | Tracked with Git LFS (Large File Storage) due to file size |
+
+The model is produced by running `imageai_build_model.py` and is subsequently loaded in `kermit_model_evaluation.py` with:
+
+```python
+model.setModelPath(os.path.join(EXECUTION_PATH, 'data/images/models/kermit_finder.h5'))
+model.loadModel(num_objects=2)
+```
+
+To pull the `.h5` file after cloning the repository, make sure Git LFS is installed:
+
+```bash
+# macOS
+brew install git-lfs
+
+# Ubuntu / Debian
+sudo apt-get install git-lfs
+```
+
+Then run `git lfs pull` from the repository root to download the model checkpoint.
+
+---
+
+## `requirements.txt`
+
+All Python dependencies are pinned to exact versions for reproducibility. Install them with:
+
+```bash
+pip install -r requirements.txt
+```
+
+| Package | Version / Source | Purpose |
+|---|---|---|
+| `pandas` | `0.23.4` | Data manipulation utilities |
+| `imageai` | `2.0.2` (GitHub wheel) | Custom image prediction and model training API |
+| `pillow` | `5.4.1` | Image I/O for rotation helpers |
+| `keras` | `2.2.4` | Deep learning backend (used by ImageAI) |
+| `opencv-python` | `4.0.0.21` | Video capture and frame annotation |
+| `scipy` | `1.2.0` | Scientific computing (ImageAI dependency) |
+| `matplotlib` | `3.0.2` | Plotting and visualisation |
+| `h5py` | `2.9.0` | Reading and writing `.h5` model files |
+| `tensorflow` | `1.12.0` | ML framework (CPU build) |
+| `tensorflow-gpu` | `1.12.0` | ML framework (GPU build) |
+| `google_images_download` | latest | Downloading additional training images from Google |
+
+`imageai` is installed directly from the GitHub release wheel rather than PyPI:
+
+```
+https://github.com/OlafenwaMoses/ImageAI/releases/download/2.0.2/imageai-2.0.2-py3-none-any.whl
+```
+
+<Warning>
+  `requirements.txt` lists **both** `tensorflow==1.12.0` and `tensorflow-gpu==1.12.0`. You should install **only one** of these depending on your hardware. Installing both in the same environment can cause import conflicts and unpredictable behaviour. Remove whichever line is not appropriate for your setup before running `pip install -r requirements.txt`.
+
+  On macOS, the standard PyPI wheel for TensorFlow 1.12 does not work. Install it from the official storage URL instead:
+
+  ```bash
+  python3 -m pip install --upgrade https://storage.googleapis.com/tensorflow/mac/cpu/tensorflow-1.12.0-py3-none-any.whl
+  ```
+</Warning>
+
+---
+
+## `EXECUTION_PATH`
+
+At the top of `kermit_model_evaluation.py`, the current working directory is captured once at import time:
+
+```python
+EXECUTION_PATH = os.getcwd()
+```
+
+This variable is used to build all file paths for the model checkpoint, the class JSON, and predicted image frames:
+
+```python
+model.setModelPath(os.path.join(EXECUTION_PATH, 'data/images/models/kermit_finder.h5'))
+model.setJsonPath(os.path.join(EXECUTION_PATH, 'data/images/json/model_class.json'))
+```
+
+<Warning>
+  `kermit_model_evaluation.py` **must be run from the repository root directory**. If you invoke the script from a different directory, `EXECUTION_PATH` will not point to the `data/` tree and the model will fail to load. Always use:
+
+  ```bash
+  cd /path/to/detect_kermit
+  python kermit_model_evaluation.py -t image -f kermit.jpeg
+  ```
+</Warning>
